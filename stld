@@ -1,0 +1,94 @@
+#!/bin/bash
+
+# Copyright 2022 Jamie Woods, Insanity Radio - all rights reserved.
+# See LICENSE
+
+usage() {
+	echo "Usage: $0 [tx|rx] --host=127.0.0.1 --port=3600 [--redundancy=0-2] [--source='autoaudiosrc'|--sink='autoaudiosink']"
+	exit 1;
+}
+
+SOURCE=autoaudiosrc
+SINK=autoaudiosink
+HOST=127.0.0.1
+REDUNDANCY=0
+PORT=3600
+SAMPLE_RATE=48000
+GST_LAUNCH="/usr/bin/env gst-launch-1.0"
+
+while [[ $# -gt 0 ]]; do
+	case $1 in
+		tx)
+			[[ $MODE ]] && (echo Mode already set; exit 1)
+			MODE=tx
+			shift ;;
+		rx)
+			[[ $MODE ]] && (echo Mode already set; exit 1)
+			MODE=rx
+			shift ;;
+		--host)
+			HOST="$2"
+			shift; shift ;;
+		--port)
+			PORT="$2"
+			shift; shift ;;
+		--source)
+			SOURCE="$2"
+			shift; shift ;;
+		--sink)
+			SINK="$2"
+			shift; shift ;;
+		--redundancy)
+			REDUNDANCY="$2"
+			shift; shift ;;
+		--gst-launch)
+			GST_LAUNCH="$2"
+			shift; shift ;;
+		--sample-rate)
+			SAMPLE_RATE="$2"
+			shift; shift ;;
+		-*|--*)
+			echo "Unknown option $1"
+			usage
+			exit 1 ;;
+		*)
+			;;
+	esac
+done
+
+[[ $MODE ]] || usage
+
+trap_ctrlC() {
+    echo "Press CTRL-C again to exit. Restarting in 1 second"
+    sleep 1 || exit 1
+}
+
+trap trap_ctrlC SIGINT SIGTERM
+
+echo "**  Starting GStreamer"
+echo
+while true; do
+	if [[ $MODE == "tx" ]]; then 
+		$GST_LAUNCH $SOURCE \
+			! audioconvert ! audioresample ! queue \
+			! audio/x-raw,format=S16BE,channels=2,rate=$SAMPLE_RATE ! rtpL16pay mtu=1023 pt=103  \
+			! rtpulpfecenc percentage=100 pt=122 ! rtpredenc distance=$REDUNDANCY pt=122  \
+			! udpsink host=$HOST port=$PORT
+	elif [[ $MODE == "rx" ]]; then
+		$GST_LAUNCH udpsrc uri=udp://$HOST:$PORT caps="application/x-rtp, payload=103" \
+			! rtpreddec pt=122 ! rtpstorage size-time=220000000 \
+			! application/x-rtp, payload=103, media=audio ! rtpjitterbuffer do-lost=1 latency=200 \
+			! rtpulpfecdec pt=122 ! rtpL16depay \
+			! rawaudioparse format=pcm pcm-format=s16be sample-rate=$SAMPLE_RATE num-channels=2 \
+			! audioconvert ! queue \
+			! $SINK
+	else
+		usage
+	fi
+
+	echo
+	echo "**  Restarting GStreamer"
+	echo
+
+	sleep 0.25
+done

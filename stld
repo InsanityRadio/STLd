@@ -11,6 +11,7 @@ usage() {
 }
 
 HOST=127.0.0.1
+BIND=0.0.0.0
 PORT=3600
 SOURCE=autoaudiosrc
 SINK=autoaudiosink
@@ -18,6 +19,7 @@ SAMPLE_RATE=48000
 REDUNDANCY=0
 LATENCY=200
 GST_LAUNCH="/usr/bin/nice -n -20 gst-launch-1.0"
+TCP=
 
 while [[ $# -gt 0 ]]; do
 	case $1 in
@@ -34,6 +36,9 @@ while [[ $# -gt 0 ]]; do
 			shift; shift ;;
 		--port)
 			PORT="$2"
+			shift; shift ;;
+		--bind)
+			BIND="$2"
 			shift; shift ;;
 		--source)
 			SOURCE="$2"
@@ -53,6 +58,10 @@ while [[ $# -gt 0 ]]; do
 		--sample-rate)
 			SAMPLE_RATE="$2"
 			shift; shift ;;
+		--tcp)
+			TCP=1
+			DISTANCE="0"
+			shift ;;
 		-*|--*)
 			echo "Unknown option $1"
 			usage
@@ -75,19 +84,35 @@ echo "**  Starting GStreamer"
 echo
 while true; do
 	if [[ $MODE == "tx" ]]; then 
+
+		if [[ $TCP == 1 ]]; then
+			SINK="rtpL16pay ! rtpstreampay ! tcpserversink port=$PORT host=$BIND"
+		else
+			SINK="rtpL16pay mtu=1023 pt=103 ! rtpredenc distance=$REDUNDANCY pt=122 ! udpsink host=$HOST port=$PORT"
+		fi
+
 		$GST_LAUNCH $SOURCE \
 			! audioconvert ! audioresample ! queue \
-			! audio/x-raw,format=S16BE,channels=2,rate=$SAMPLE_RATE ! rtpL16pay mtu=1023 pt=103  \
-			! rtpredenc distance=$REDUNDANCY pt=122  \
-			! udpsink host=$HOST port=$PORT
+			! audio/x-raw,format=S16BE,channels=2,rate=$SAMPLE_RATE \
+			! $SINK
+
 	elif [[ $MODE == "rx" ]]; then
-		$GST_LAUNCH udpsrc uri=udp://$HOST:$PORT caps="application/x-rtp, payload=103" \
-			! rtpreddec pt=122 ! rtpstorage size-time=220000000 \
-			! application/x-rtp, payload=103, media=audio ! rtpjitterbuffer do-lost=1 latency=$LATENCY \
+
+		if [[ $TCP == 1 ]]; then 
+			SOURCE="tcpclientsrc host=$HOST port=$PORT do-timestamp=true ! application/x-rtp-stream,clock-rate=$SAMPLE_RATE,media=audio,payload=103,encoding-name=L16 ! rtpstreamdepay ! clocksync "
+		else
+			SOURCE="udpsrc uri=udp://$HOST:$PORT caps=\"application/x-rtp,payload=103\" ! rtpreddec pt=122"
+			SOURCE="$SOURCE ! rtpstorage size-time=220000000 ! application/x-rtp, payload=103, media=audio"
+			SOURCE="$SOURCE ! rtpjitterbuffer do-lost=1 latency=$LATENCY"
+		fi
+
+		echo $SOURCE
+		$GST_LAUNCH $SOURCE \
 			! rtpL16depay \
 			! rawaudioparse format=pcm pcm-format=s16be sample-rate=$SAMPLE_RATE num-channels=2 \
 			! audioconvert ! queue \
 			! $SINK
+
 	else
 		usage
 	fi

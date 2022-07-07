@@ -82,11 +82,12 @@ trap trap_ctrlC SIGINT SIGTERM
 
 echo "**  Starting GStreamer"
 echo
+
 while true; do
 	if [[ $MODE == "tx" ]]; then 
 
 		if [[ $TCP == 1 ]]; then
-			SINK="rtpL16pay ! rtpstreampay ! tcpserversink port=$PORT host=$BIND"
+			SINK="rtpL16pay pt=96 ! rtpstreampay ! tcpserversink port=$PORT host=$BIND"
 		else
 			SINK="rtpL16pay mtu=1023 pt=103 ! rtpredenc distance=$REDUNDANCY pt=122 ! udpsink host=$HOST port=$PORT"
 		fi
@@ -99,11 +100,15 @@ while true; do
 	elif [[ $MODE == "rx" ]]; then
 
 		if [[ $TCP == 1 ]]; then 
-			SOURCE="tcpclientsrc host=$HOST port=$PORT do-timestamp=true ! application/x-rtp-stream,clock-rate=$SAMPLE_RATE,media=audio,payload=103,encoding-name=L16 ! rtpstreamdepay ! clocksync "
+			SOURCE="tcpclientsrc host=$HOST port=$PORT do-timestamp=true \
+				! application/x-rtp-stream,clock-rate=$SAMPLE_RATE,media=audio,payload=96,encoding-name=L16 \
+				! rtpstreamdepay \
+				! rtpjitterbuffer latency=$LATENCY mode=synced"
 		else
-			SOURCE="udpsrc uri=udp://$HOST:$PORT caps=\"application/x-rtp,payload=103\" ! rtpreddec pt=122"
-			SOURCE="$SOURCE ! rtpstorage size-time=220000000 ! application/x-rtp, payload=103, media=audio"
-			SOURCE="$SOURCE ! rtpjitterbuffer do-lost=1 latency=$LATENCY"
+			SOURCE="udpsrc uri=udp://$HOST:$PORT caps=\"application/x-rtp,payload=103\" \
+				! rtpreddec pt=122 \
+				! rtpstorage size-time=220000000 ! application/x-rtp, payload=103, media=audio \
+				! rtpjitterbuffer do-lost=1 latency=$LATENCY"
 		fi
 
 		echo $SOURCE

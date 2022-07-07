@@ -4,16 +4,19 @@
 # See LICENSE
 
 usage() {
-	echo "Usage: $0 [tx|rx] --host=127.0.0.1 --port=3600 [--redundancy=0-2] [--source='autoaudiosrc'|--sink='autoaudiosink']"
+	echo "Usage:"
+	echo "  $0 tx --host 127.0.0.1 --port 3600 --source 'autoaudiosrc' [--redundancy 0-2]"
+	echo "  $0 rx --host 127.0.0.1 --port 3600 --sink 'autoaudiosink' [--latency 200]"
 	exit 1;
 }
 
+HOST=127.0.0.1
+PORT=3600
 SOURCE=autoaudiosrc
 SINK=autoaudiosink
-HOST=127.0.0.1
-REDUNDANCY=0
-PORT=3600
 SAMPLE_RATE=48000
+REDUNDANCY=0
+LATENCY=200
 GST_LAUNCH="/usr/bin/nice -n -20 gst-launch-1.0"
 
 while [[ $# -gt 0 ]]; do
@@ -37,6 +40,9 @@ while [[ $# -gt 0 ]]; do
 			shift; shift ;;
 		--sink)
 			SINK="$2"
+			shift; shift ;;
+		--latency)
+			LATENCY="$2"
 			shift; shift ;;
 		--redundancy)
 			REDUNDANCY="$2"
@@ -77,7 +83,7 @@ while true; do
 	elif [[ $MODE == "rx" ]]; then
 		$GST_LAUNCH udpsrc uri=udp://$HOST:$PORT caps="application/x-rtp, payload=103" \
 			! rtpreddec pt=122 ! rtpstorage size-time=220000000 \
-			! application/x-rtp, payload=103, media=audio ! rtpjitterbuffer do-lost=1 latency=200 \
+			! application/x-rtp, payload=103, media=audio ! rtpjitterbuffer do-lost=1 latency=$LATENCY \
 			! rtpL16depay \
 			! rawaudioparse format=pcm pcm-format=s16be sample-rate=$SAMPLE_RATE num-channels=2 \
 			! audioconvert ! queue \

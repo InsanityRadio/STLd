@@ -6,4 +6,4 @@ WORKDIR /opt
 COPY ./stld /opt/stld
 RUN chmod +x /opt/stld
 
-ENTRYPOINT /opt/stld
+ENTRYPOINT ["/opt/stld"]

@@ -72,13 +72,13 @@ while true; do
 		$GST_LAUNCH $SOURCE \
 			! audioconvert ! audioresample ! queue \
 			! audio/x-raw,format=S16BE,channels=2,rate=$SAMPLE_RATE ! rtpL16pay mtu=1023 pt=103  \
-			! rtpulpfecenc percentage=100 pt=122 ! rtpredenc distance=$REDUNDANCY pt=122  \
+			! rtpredenc distance=$REDUNDANCY pt=122  \
 			! udpsink host=$HOST port=$PORT
 	elif [[ $MODE == "rx" ]]; then
 		$GST_LAUNCH udpsrc uri=udp://$HOST:$PORT caps="application/x-rtp, payload=103" \
 			! rtpreddec pt=122 ! rtpstorage size-time=220000000 \
 			! application/x-rtp, payload=103, media=audio ! rtpjitterbuffer do-lost=1 latency=200 \
-			! rtpulpfecdec pt=122 ! rtpL16depay \
+			! rtpL16depay \
 			! rawaudioparse format=pcm pcm-format=s16be sample-rate=$SAMPLE_RATE num-channels=2 \
 			! audioconvert ! queue \
 			! $SINK

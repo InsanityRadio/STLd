@@ -22,7 +22,7 @@ A simple wrapper around gstreamer for creating a reliable low-latency Studio Tra
 		--sink 'alsasink device="plughw:0"'
 
 
-Note the host parameter is the address to bind on. STLd provides no authentication. It is recommended to use a firewall to only accept UDP traffic from a known host. 
+Note the host parameter is the address to bind on. STLd provides no authentication. It is recommended to use a firewall to only accept UDP traffic from a known host, or - for example over the internet - to pair with a lightweight point-to-point VPN such as ZeroTier One. 
 
 ## Real World Use
 
@@ -36,10 +36,12 @@ Other software (such as our alumnus James Harrison's OpenOB) is brilliant and se
 
 ## Docker Usage
 
+Note: JackD doesn't play nice inside Docker. ALSA works but requires the container to be launched with privileges. 
+
 ```
 docker build . -t insanityradio/stld:latest
-docker run --name stl --restart=always --ipc=host --net host --privileged -d insanityradio/stld:latest tx --host 10.0.0.10 --port 3600 --source "alsasrc device=plug:hw:0" --redundancy 2
-docker run --name stl --restart=always --ipc=host --net host --privileged -d insanityradio/stld:latest rx --host 10.0.0.10 --port 3600 --source "alsasrc device=plug:hw:0" --redundancy 2
+docker run --name stl --restart=always --device /dev/snd --net host --privileged -d insanityradio/stld:latest tx --host 10.0.0.10 --port 3600 --source "alsasrc device=plughw:0" --redundancy 2
+docker run --name stl --restart=always --device /dev/snd --net host --privileged -d insanityradio/stld:latest rx --host 0.0.0.0 --port 3600 --sink 'alsasink device="plughw:0"'
 ```
 
 ## Development

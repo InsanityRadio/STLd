@@ -26,10 +26,12 @@ while [[ $# -gt 0 ]]; do
 		tx)
 			[[ $MODE ]] && (echo Mode already set; exit 1)
 			MODE=tx
+			CLIENT_SERVER=client
 			shift ;;
 		rx)
 			[[ $MODE ]] && (echo Mode already set; exit 1)
 			MODE=rx
+			CLIENT_SERVER=server
 			shift ;;
 		--host)
 			HOST="$2"
@@ -71,6 +73,8 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
+LATENCY_NSEC="${LATENCY}000000"
+
 [[ $MODE ]] || usage
 
 trap_ctrlC() {
@@ -87,7 +91,7 @@ while true; do
 	if [[ $MODE == "tx" ]]; then 
 
 		if [[ $TCP == 1 ]]; then
-			SINK="rtpL16pay pt=96 ! rtpstreampay ! tcpserversink port=$PORT host=$BIND"
+			SINK="rtpL16pay pt=96 ! rtpstreampay ! tcp${CLIENT_SERVER}sink port=$PORT host=$BIND"
 		else
 			SINK="rtpL16pay mtu=1023 pt=103 ! rtpredenc distance=$REDUNDANCY pt=122 ! udpsink host=$HOST port=$PORT"
 		fi
@@ -100,7 +104,7 @@ while true; do
 	elif [[ $MODE == "rx" ]]; then
 
 		if [[ $TCP == 1 ]]; then 
-			SOURCE="tcpclientsrc host=$HOST port=$PORT do-timestamp=true \
+			SOURCE="tcp${CLIENT_SERVER}src host=$HOST port=$PORT do-timestamp=true \
 				! application/x-rtp-stream,clock-rate=$SAMPLE_RATE,media=audio,payload=96,encoding-name=L16 \
 				! rtpstreamdepay \
 				! rtpstorage size-time=220000000 \
@@ -108,8 +112,8 @@ while true; do
 		else
 			SOURCE="udpsrc uri=udp://$HOST:$PORT caps=\"application/x-rtp,payload=103\" \
 				! rtpreddec pt=122 \
-				! rtpstorage size-time=220000000 ! application/x-rtp, payload=103, media=audio \
-				! rtpjitterbuffer do-lost=1 latency=$LATENCY"
+				! rtpstorage size-time=${LATENCY_NSEC}00 ! application/x-rtp, payload=103, media=audio \
+				! rtpjitterbuffer do-lost=1 mode=slave do-retransmission=1 max-misorder-time=${LATENCY}0 rtx-retry-period=$LATENCY latency=$LATENCY"
 		fi
 
 		echo $SOURCE

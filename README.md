@@ -6,9 +6,9 @@ A simple wrapper around gstreamer for creating a reliable low-latency Studio Tra
 
 ### Sending
 
-	stld tx
-		--host 10.32.100.1
-		--port 3600
+	stld tx \
+		--host 10.32.100.1 \
+		--port 3600 \
 		[--redundancy 0-2]
 		--source 'alsasrc device="hw:0"'	(using ALSA)
 		--source 'jackaudiosrc connect=1'	(using JACK)
@@ -16,9 +16,9 @@ A simple wrapper around gstreamer for creating a reliable low-latency Studio Tra
 
 ### Receiving
 
-	stld rx
-		--host 0.0.0.0
-		--port 3600
+	stld rx \
+		--host 0.0.0.0 \
+		--port 3600 \
 		--sink 'alsasink device="plughw:0"'
 
 
@@ -43,6 +43,12 @@ docker build . -t insanityradio/stld:latest
 docker run --name stl --restart=always --device /dev/snd --net host --privileged -d insanityradio/stld:latest tx --host 10.0.0.10 --port 3600 --source "alsasrc device=plughw:0" --redundancy 2
 docker run --name stl --restart=always --device /dev/snd --net host --privileged -d insanityradio/stld:latest rx --host 0.0.0.0 --port 3600 --sink 'alsasink device="plughw:0"'
 ```
+
+## Synchronisation
+
+For 24/7 broadcast use, you would want to synchronise the sender and receiver clocks. Unfortunately, GStreamer does not provide a mechanism to do this transparently. Hence, if you use STLd with ALSA or Jack, you may experience the occasional drop-out.
+
+For real world use, the PipeWire project provides DLL-based clock synchronisation - a similar technique used in higher end AD/DA. For example, Insanity Radio uses STLd with PipeWire src/sink elements to avoid noticable drops/under-runs on air. 
 
 ## Development
 
